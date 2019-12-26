@@ -82,7 +82,9 @@ JTAC_jtacStatusF10 = true -- enables F10 JTAC Status menu
 
 JTAC_location = true -- shows location in JTAC message, can be overriden by the JTACAutoLase in editor
 
-JTAC_lock =  "all" -- "vehicle" OR "troop" OR "all" forces JTAC to only lock vehicles or troops or all ground units 
+JTAC_lock =  "all" -- "vehicle" OR "troop" OR "all" forces JTAC to only lock vehicles or troops or all ground units
+
+JTAC_latLngFormat = "DMS" -- location in JTAC message "DMS" = degrees, minutes, decimal seconds or "DM" = degrees, decimal minutes.
 
 -- END CONFIG
 
@@ -186,8 +188,7 @@ function JTACAutoLase(jtacGroupName, laserCode,smoke,lock,colour)
             -- store current target for easy lookup
             GLOBAL_JTAC_CURRENT_TARGETS[jtacGroupName] = { name = enemyUnit:getName(), unitType = enemyUnit:getTypeName(), unitId = enemyUnit:getID() }
 
-            notify(jtacGroupName .. " lasing new target " .. enemyUnit:getTypeName() .. '. CODE: ' .. laserCode ..getPositionString(enemyUnit) , 10)
-
+            notify(jtacGroupName .. " lasing new target " .. enemyUnit:getTypeName() .. '. CODE: ' .. laserCode .. getPositionString(enemyUnit) .. " " .. heightString(enemyUnit) , 10)
             -- create smoke
             if smoke == true then
 
@@ -547,7 +548,7 @@ function getJTACStatus()
             end
 
             if enemyUnit ~= nil and enemyUnit:getLife() > 0 and enemyUnit:isActive() == true then
-                message = message .. "" .. jtacGroupName .. " targeting " .. enemyUnit:getTypeName().. " CODE: ".. laserCode .. getPositionString(enemyUnit) .. "\n"
+                message = message .. "" .. jtacGroupName .. " targeting " .. enemyUnit:getTypeName().. " CODE: ".. laserCode .. getPositionString(enemyUnit) .. " " .. heightString(enemyUnit) .. "\n"
             else
                 message = message .. "" .. jtacGroupName .. " searching for targets" .. getPositionString(jtacUnit) .."\n"
             end
@@ -657,32 +658,61 @@ function latLngString(unit, acc)
 	
 	local lonDeg = math.floor(lon)
 	local lonMin = (lon - lonDeg)*60
-	
-  -- degrees, decimal minutes.
-	latMin = roundNumber(latMin, acc)
-	lonMin = roundNumber(lonMin, acc)
-	
-	if latMin == 60 then
-		latMin = 0
-		latDeg = latDeg + 1
-	end
+	if JTAC_latLngFormat == "DMS" then	-- degrees, minutes, and seconds.
+		local oldLatMin = latMin
+		latMin = math.floor(latMin)
+		local latSec = roundNumber((oldLatMin - latMin)*60, acc)
 		
-	if lonMin == 60 then
-		lonMin = 0
-		lonDeg = lonDeg + 1
-	end
-	
-	local minFrmtStr -- create the formatting string for the minutes place
-	if acc <= 0 then  -- no decimal place.
-		minFrmtStr = '%02d'
-	else
-		local width = 3 + acc  -- 01.310 - that's a width of 6, for example.
-		minFrmtStr = '%0' .. width .. '.' .. acc .. 'f'
-	end
-	
-	return string.format('%02d', latDeg) .. ' ' .. string.format(minFrmtStr, latMin) .. '\'' .. latHemi .. '   '
-   .. string.format('%02d', lonDeg) .. ' ' .. string.format(minFrmtStr, lonMin) .. '\'' .. lonHemi
+		local oldLonMin = lonMin
+		lonMin = math.floor(lonMin)
+		local lonSec = roundNumber((oldLonMin - lonMin)*60, acc)
+		if latSec == 60 then
+			latSec = 0
+			latMin = latMin + 1
+		end
 
+		if lonSec == 60 then
+			lonSec = 0
+			lonMin = lonMin + 1
+		end
+
+		local secFrmtStr -- create the formatting string for the seconds place
+		if acc <= 0 then	-- no decimal place.
+			secFrmtStr = '%02d'
+	        else
+			local width = 3 + acc	-- 01.310 - that's a width of 6, for example.
+			secFrmtStr = '%0' .. width .. '.' .. acc .. 'f'
+		end
+
+		return string.format('%02d', latDeg) .. ' ' .. string.format('%02d', latMin) .. '\' ' .. string.format(secFrmtStr, latSec) .. '"' .. latHemi .. '	 '
+		.. string.format('%02d', lonDeg) .. ' ' .. string.format('%02d', lonMin) .. '\' ' .. string.format(secFrmtStr, lonSec) .. '"' .. lonHemi
+
+		else	-- degrees, decimal minutes.
+		latMin = roundNumber(latMin, acc)
+		lonMin = roundNumber(lonMin, acc)
+
+		if latMin == 60 then
+		latMin = 0
+			latDeg = latDeg + 1
+		end
+
+		if lonMin == 60 then
+			lonMin = 0
+			lonDeg = lonDeg + 1
+		end
+
+		local minFrmtStr -- create the formatting string for the minutes place
+		if acc <= 0 then	-- no decimal place.
+			minFrmtStr = '%02d'
+		else
+			local width = 3 + acc	-- 01.310 - that's a width of 6, for example.
+			minFrmtStr = '%0' .. width .. '.' .. acc .. 'f'
+		end
+
+		return string.format('%02d', latDeg) .. ' ' .. string.format(minFrmtStr, latMin) .. '\'' .. latHemi .. '	 '
+		.. string.format('%02d', lonDeg) .. ' ' .. string.format(minFrmtStr, lonMin) .. '\'' .. lonHemi
+
+	end
 end
 
 -- source of Function MIST - https://github.com/mrSkortch/MissionScriptingTools/blob/master/mist.lua
@@ -705,7 +735,13 @@ if JTAC_jtacStatusF10 == true then
     timer.scheduleFunction(addRadioCommands, nil, timer.getTime() + 1)
 end
 
-
+function heightString(unit)
+	local pos = unit:getPosition().p
+	local heightMeters = land.getHeight({x = pos.x, y = pos.z})
+	local heightMetersRounded = roundNumber(heightMeters, 0)
+	local heightFeetRounded = roundNumber(heightMeters * 3.28084, 0)
+	return string.format('ELEVATION: %dm / %dft', heightMetersRounded, heightFeetRounded)
+end
 
 --DEBUG FUNCTIONS - IGNORE
 --function print_functions(o)
